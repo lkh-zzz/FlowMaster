@@ -13,7 +13,19 @@ FlowMaster 是一款功能强大且灵活的流量控制脚本，专为 Linux �
 ## 安装方法
 
 ```bash
-git clone ...
+git clone https://github.com/lkh-zzz/FlowMaster.git
+```
+
+```bash
+cd FlowMaster
+```
+
+默认是安装到/usr/local/bin/目录下，会有一个FlowMaster的可执行文件
+```bash
+make install
+```
+```bash
+make uninstall
 ```
 
 ## 使用方法
