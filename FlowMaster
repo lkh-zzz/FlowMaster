@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+
+#
+# FlowMaster - Network Traffic Control Script
+#
+# FlowMaster is a versatile shell script designed for bandwidth shaping and
+# traffic control on Linux systems. It utilizes the Traffic Control (tc)
+# subsystem to enforce upload and download speed limits on specified network
+# interfaces, optionally targeting specific IP addresses for fine-grained
+# management.
+#
+# The script provides commands to start, stop, and monitor traffic control
+# settings, facilitating efficient network resource allocation and prioritization.
+# Whether you're optimizing performance for mission-critical applications or
+# managing bandwidth consumption across a shared network, FlowMaster offers
+# straightforward solutions for enhancing your network's operational efficiency.
+#
+#
+# Copyright (C) YEAR bbxwg <18530490625@163.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+
+DSPEED=""
+USPEED=""
+NetWorkInterface=""
+IP=""
+IFB="ifb0"
+
+if [[ $(id -u) -ne 0 ]]; then 
+    echo "Running as non root / sudo user"
+fi
+
+usage() {
+cat <<EOF
+Usage: $(basename $0) [options]
+
+Options:
+    -d DSPEED      Set download speed limit (in kbit).
+    -U USPEED      Set upload speed limit (in kbit).
+    -e INTERFACE   Specify the network interface.
+    -i IP          Specify the IP address for strict filtering.
+
+Mode:
+        start          Example Start the flowMaster of the specified network port
+	restart        Example Restart the flowMaster of the specified network port
+	stop           Example Stop the flowMaster of the specified network port
+	status         Displays all TC Settings for the current network port name
+	mangle         Displays all current iptables Settings
+
+Example:
+        ./$(basename $0) -d 1000 -U 500 -e eth0 -i 192.168.1.100 start
+	./$(basename $0) -d 1000 -U 500 -e eth0 -i 192.168.1.100 restart
+	./$(basename $0) -e eth0 stop
+	./$(basename $0) -e eth0 status
+	./$(basename $0) -e eth0 mangle
+
+
+For more information, see the script documentation.
+EOF
+}
+
+
+while getopts ":d:U:e:i:h" opt; do
+    case $opt in
+        h)
+            usage
+            exit 0
+            ;;
+        d)
+            DSPEED=$OPTARG
+            ;;
+        U)
+            USPEED=$OPTARG
+            ;;
+        e)
+            NetWorkInterface=$OPTARG
+            ;;
+        i)
+            IP=$OPTARG
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            exit 1
+            ;;
+        :)
+            echo "Option -$OPTARG requires an argument." >&2
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+
+#　开始函数
+start_tc() {
+	echo "start TC"
+	if [[ -n "$USPEED" ]]; then
+		tc qdisc add dev "$NetWorkInterface" root handle 1:0 htb
+
+		tc class add dev "$NetWorkInterface" parent 1:0 classid 1:21 htb rate "${USPEED}kbit" ceil "${USPEED}kbit"
+
+		tc filter add dev "$NetWorkInterface" parent 1:0 protocol ip prio 1 u32 match ip dst "$IP" flowid 1:21
+	fi
+
+	if [[ -n "$DSPEED" ]]; then
+		modprobe ifb numifbs=1
+		ip link set dev "$IFB" up
+
+		tc qdisc add dev "$NetWorkInterface" handle ffff: ingress
+		tc filter add dev "$NetWorkInterface" parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$IFB"
+
+		tc qdisc add dev "$IFB" root handle 2: htb
+		tc class add dev "$IFB" parent 2: classid 2:22 htb rate "${DSPEED}kbit"
+
+		tc filter add dev "$IFB" protocol ip parent 2: prio 1 u32 \
+		match ip src "$IP" flowid 2:1
+	fi
+	echo "Done"
+}
+
+stop_tc() {
+	echo "Stop TC......"
+	(tc qdisc del dev "$NetWorkInterface" root && echo "ok.") || echo "error."
+	(tc qdisc del dev "$IFB" root && echo "ok.") || echo "error."
+	(tc qdisc del dev "$IFB" ingress && echo "ok.") || echo "error."
+}
+
+status() {
+	tc -s qdisc ls dev "$NetWorkInterface"
+	tc -s class ls dev "$NetWorkInterface"
+}
+
+
+case "$1" in
+start)
+	if [[ -n "$IP" && -n "$NetWorkInterface" ]]; then
+		echo "Error: You must specify a network interface when an IP address is given."
+		usage
+		exit 1
+	fi
+
+	(#start_tc && start_mangle && echo "TC started!" ) || echo "error."
+		start_tc && echo "TC started!"
+	) || echo "error."
+	exit 0
+	;;
+
+stop)
+
+	(#stop_tc && stop_mangle && echo "TC stopped!" ) || echo "error."
+		stop_tc && echo "TC stopped!"
+	) || echo "error."
+	exit 0
+	;;
+
+restart)
+
+	stop_tc
+	stop_mangle
+	sleep 1
+	start_tc
+	echo "TC restart"
+	;;
+
+status)
+
+	status
+	;;
+
+mangle)
+
+	iptables -t mangle -nL
+	;;
+
+*)
+	usage
+	exit 1
+	;;
+esac

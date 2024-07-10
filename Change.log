@@ -1,0 +1,5 @@
+Changes since version 1.0 - bbxwg <add:The start of the FlowMaster>:
+
+    -For the convenience of the user experience, 
+    -only a single IP rate limit is currently supported because TCS are limited by ids. 
+    -Later, you can let the user configure the ID when entering or record the ID in the configuration file.
