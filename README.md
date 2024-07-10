@@ -20,10 +20,15 @@ git clone https://github.com/lkh-zzz/FlowMaster.git
 cd FlowMaster
 ```
 
+```bash
+chmod +x FlowMaster
+```
+
 默认是安装到/usr/local/bin/目录下，会有一个FlowMaster的可执行文件
 ```bash
 make install
 ```
+
 ```bash
 make uninstall
 ```
