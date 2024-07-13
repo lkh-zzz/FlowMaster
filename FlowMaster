@@ -47,6 +47,10 @@ usage() {
 cat <<EOF
 Usage: $(basename $0) [options]
 
+explain:
+     1MB=8500KBit=8MBit,This script uses KBit
+     example:-d 8500 == limit rate is 1MB/s
+
 Options:
     -d DSPEED      Set download speed limit (in kbit).
     -U USPEED      Set upload speed limit (in kbit).
@@ -110,7 +114,7 @@ start_tc() {
 	if [[ -n "$USPEED" ]]; then
 		tc qdisc add dev "$NetWorkInterface" root handle 1:0 htb
 
-		tc class add dev "$NetWorkInterface" parent 1:0 classid 1:21 htb rate "${USPEED}kbit" ceil "${USPEED}kbit"
+		tc class add dev "$NetWorkInterface" parent 1:0 classid 1:21 htb rate "${USPEED}kbit" burst "${DSPEED}kbit" cburst "${DSPEED}kbit"
 
 		tc filter add dev "$NetWorkInterface" parent 1:0 protocol ip prio 1 u32 match ip dst "$IP" flowid 1:21
 	fi
@@ -123,7 +127,7 @@ start_tc() {
 		tc filter add dev "$NetWorkInterface" parent ffff: protocol ip u32 match u32 0 0 action mirred egress redirect dev "$IFB"
 
 		tc qdisc add dev "$IFB" root handle 2: htb
-		tc class add dev "$IFB" parent 2: classid 2:22 htb rate "${DSPEED}kbit"
+		tc class add dev "$IFB" parent 2: classid 2:1 htb rate "${DSPEED}kbit" burst "${DSPEED}kbit" cburst "${DSPEED}kbit"
 
 		tc filter add dev "$IFB" protocol ip parent 2: prio 1 u32 \
 		match ip src "$IP" flowid 2:1
@@ -146,7 +150,7 @@ status() {
 
 case "$1" in
 start)
-	if [[ -n "$IP" && -n "$NetWorkInterface" ]]; then
+	if [[ -n "$IP" && -z "$NetWorkInterface" ]]; then
 		echo "Error: You must specify a network interface when an IP address is given."
 		usage
 		exit 1
